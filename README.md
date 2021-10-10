@@ -3,8 +3,6 @@ Martin Ostrowski edited this page on 11 October 2021
 # cti-mga
 Community trait indices from metagenomes and amplicons
 
-Martin Ostrowski, Mark Brown, Anthony Richardson and Wayne Rochester
-
 The concept and code for deriving community trait-indicies from kernell-weigthed density 
 estimations of the realised niches of individual species or strains was devloped in collaboration 
 with Mark Brown, Martin Ostrowski, Wayne Rochester and Anthony Richardson. 
