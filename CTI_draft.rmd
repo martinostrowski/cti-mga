@@ -1,0 +1,194 @@
+Data Input
+
+############
+#MarineB_all_20201103 <- read.csv('/Users/mvb815/MarineMicrobes Dropbox/amplicons2020/MarineB_all_20201103.csv') #BACTERIA
+
+#rich <- MarineA_all_20201111 %>% group_by(code) %>% summarise(rich = n_distinct(ASV) ,sample_total=sum(abund)) 
+
+#MarineA_all_20201111 <- left_join(MarineA_all_20201111, rich, by='code')
+#pelB <- MarineA_all_20201111
+#pelEp <- left_join(pelB, meta, by='code')
+
+#replace abudnance with proportion by normalising abundance by the total sequences in the sample
+
+#pelEp$prop <- (pelEp$abund / pelEp$sample_total) * 100
+#pelEp1 <- subset(pelEP_tot[,c(1:3,5:46)])
+#pelEp <- pelEp %>% rename(original_abund = abund) %>% rename(abund = prop)
+#write.csv(pelEp, "Archaea_pelEp_20210304.csv")
+
+#####################
+
+#pelEp <- read.csv('/Users/mvb815/MarineMicrobes Dropbox/CTI_2020/ASV_indices/Archaea_pelEp_20210225.csv')
+pelEp <- read.csv('/Users/mvb815/MarineMicrobes Dropbox/CTI_2020/ASV_indices/Archaea_pelEp_20210304.csv')
+
+#removing deep casts from IN2016_v04
+smS1.13CTI <- smS1.13Long %>% drop_na(`temperature_deg_c`)  %>% filter(!location %in% c('Deep Cast - Tasman' , 'Deep Cast')) %>% mutate(SST = round(`temperature_deg_c`/0.2) * 0.2)  # create p bins
+
+colnames(taraw1)
+
+meta_combined <- meta %>% bind_rows(taraw1 %>% 
+  mutate('longitude_decimal_degrees' =as.numeric(lon)) %>% 
+    mutate('nitrate_nitrite_umol_per_l'=  as.numeric(nox)) %>% 
+    mutate('phosphate_umol_per_l'= as.numeric(po4)) %>% 
+    rename('latitude_decimal_degrees' = lat, 
+         'depth_m' = depth, 
+         'utc_date_samples_yyyymmdd' = date, 
+         'temperature_deg_c' =temp,
+         ) %>%  mutate(uniqcode='TARA'))
+
+
+```{r}
+meta_sub <- ssTest1  %>%  dplyr::select(code, temperature_deg_c, uniqcode) %>% distinct() %>% mutate(SST_sub = round(`temperature_deg_c`/3) * 3)  #!grepl('ERR', code) #dplyr::filter(code %in% smS1.13CTI$code) 
+meta_sub <- meta_sub %>% mutate(SST_sub = case_when(SST_sub < 0 ~ 0, SST_sub >= 0 ~ SST_sub))
+
+hist(meta_sub$SST_sub, labels=T,breaks = seq(-3,33,3), fill=meta_sub$uniqcode)
+plot(meta_sub$SST_sub, meta_sub$temperature_deg_c)
+
+
+# resampling the input data
+
+for (p in 1:100) {
+  
+  
+meta_subset <- meta_sub %>% 
+  filter (temperature_deg_c > 0)  %>% 
+  group_by(SST_sub) %>% 
+  sample_n(size = 139, replace=TRUE)
+
+smS1.13CTI_select <- smS1.13CTI %>% 
+  filter(prop > 0, code %in% meta_subset$code) # select codes
+
+
+#subset <- smS1.13CTI_select %>% dplyr::select(code) %>% distinct() #add selected codes to file
+#subset[i]$subset[i] <- "yes"
+
+#run loop       
+x <- smS1.13CTI_select %>% dplyr::select(SST, sequence, prop) # %>%  filter (ASV %in% pelagicECTI.ASV$ASV[1:22059]) #select ASVs > 500 but now using just ntax=20- to select ASVs in > 20 samples
+
+#x$abund  <-  x$abund+1 #for negative values CoDaSeq approach
+
+dfn <- x %>% group_by(sequence) %>% summarize(ntax = n())
+
+dfx <- inner_join(x, dfn, by="sequence")
+
+summary(dfx$ntax)
+notax <- 20 # number of occurrences - choose the threshold for the ntax here. 
+dfx <- subset(dfx, ntax>notax)
+
+
+df <- dfx %>% group_by(SST, sequence) %>%
+  summarize(abund = sum(prop), freq = n(), a = sum(prop)/n()) %>%
+  droplevels()
+
+df$sequence <- factor(df$sequence, levels=unique(df$sequence))
+
+#ggplot(df$) + geom_bar(aes(x=SST, y=abund, fill=sequence), stat='identity') + theme(legend.position='none')
+  
+sti_id <- matrix(0, nrow=nlevels(df$sequence), ncol=7) #set up a matrix to read results to - with the number of rows as ASVs and the number of columns as the indices being caluclated
+colnames(sti_id)=c("sequence", "sti_density","sti_mean", "STRq2", "STRq4","Tmax","Tmin") #,"TAXON_p", "sti_p") only use these if comparing sti methods
+
+kernStep <- 0.1
+kernMin <- min(df$SST) - 3 
+kernMax <- max(df$SST) + 3
+kernN <- round((kernMax - kernMin) / kernStep + 1)
+kernTemps <- seq(kernMin, kernMax, length.out=kernN)
+#kernBw <- 2 # use default rather than set externally 
+
+#kern_y <- matrix(0, nrow = kernN, ncol = nlevels(df$ASV)) # used to plot figures
+#kyout <- matrix(0, nrow = kernN, ncol = nlevels(df$ASV))
+
+
+
+for (i in 1:nlevels(df$sequence)) {
+  taxon <- levels(df$sequence)[i]
+  kernData <- subset(df[,c(1:3,5)], sequence == taxon & abund > 0)
+  kernData$sequence <- factor(kernData$sequence)
+  kernData$weight <- with(kernData, abs(abund) / sum(abund))
+  kernOut <- with(kernData,
+                  density(SST, weight=weight,
+                          #bw="nrd0",
+                          from=kernMin,
+                          to=kernMax,
+                          n=kernN))
+  
+  z <- cbind(kernTemps, kernOut$y)
+  m <- as.data.frame(z)
+  z <- z[which.max(z[,2]),] 
+  
+  #mean approach
+  meanData <- kernData %>% arrange(desc(abund))
+  bins <- head(meanData,4)
+  meanOut <- mean(bins$SST)
+  
+  #half zmax as range approach
+
+  #q2 <- as.numeric(z[2])/2
+  #q4 <- as.numeric(z[2])/4
+  a = which(m$V2 > (as.numeric(z[2])/2))
+  b = which(m$V2 > (as.numeric(z[2])/4))
+  #a1 <- head(a, n=1)
+  #a2 <- tail(a, n=1)
+  #a1 <- m$kernTemps[(head(a, n=1))]
+  #a2 <- m$kernTemps[(tail(a, n=1))]
+  #b1 <- head(b, n=1)
+  #b2 <- tail(b, n=1)
+  Tmin <- m$kernTemps[(head(b, n=1))]
+  Tmax <- m$kernTemps[(tail(b, n=1))]
+  rangeq2 <- (m$kernTemps[(tail(a, n=1))]) - (m$kernTemps[(head(a, n=1))])
+  rangeq4 <- (m$kernTemps[(tail(b, n=1))]) - (m$kernTemps[(head(b, n=1))])
+   
+  
+  #vlines <- c(Tmin,Tmax)
+  #ggplot(m, aes(x=kernTemps,y=V2)) + geom_point() + geom_vline(xintercept=vlines) + theme_bw() + geom_point(aes(x=30.45, y= 0.20), colour = 'steelblue2')
+  
+  sti_id[i,1] <- paste0(taxon)
+  sti_id[i,2] <- as.numeric(z[1])
+  sti_id[i,3] <- as.numeric(meanOut)
+  sti_id[i,4] <- as.numeric(rangeq2)
+  sti_id[i,5] <- as.numeric(rangeq4)
+  sti_id[i,6] <- as.numeric(Tmax)
+  sti_id[i,7] <- as.numeric(Tmin)
+  
+}
+
+
+sti_id <- as.data.frame(sti_id)
+colnames(sti_id) <- c("sequence", "STI_density","STI_mean", "STRq2", "STRq4","Tmax","Tmin")
+write.csv(sti_id, file = paste("~/Archaea_sti_id_Temperature_subset",p,".csv", sep=""))
+          
+          
+nrs_all <- smS1.13CTI %>%
+      inner_join(sti_id, by="sequence") %>% 
+  mutate(STI_density = as.numeric(as.character(STI_density)),
+         STI_mean = as.numeric(as.character(STI_mean)),
+         STRq2 = as.numeric(as.character(STRq2)),
+         STRq4 = as.numeric(as.character(STRq4)),
+         Tmax = as.numeric(as.character(Tmax)), Tmin=as.numeric(as.character(Tmin))) %>% 
+  drop_na(STI_density) %>% droplevels()
+
+cti_nrs_all <- nrs_all %>% group_by(code) %>% summarise(cti_d = sum(coverage*STI_density)/sum(coverage), 
+                                                cti_m = sum(coverage*STI_mean)/sum(coverage),
+                                                ctrq2 = sum(coverage*STRq2)/sum(coverage),
+                                                ctrq4 = sum(coverage*STRq4)/sum(coverage),
+                                                proportion_T = sum(coverage),
+                                                cti_max =sum(coverage*Tmax)/sum(coverage),
+                                                sum = sum(coverage))
+
+
+
+cti_all <- inner_join(cti_nrs_all, nrs_all, by = c("code"))
+
+cti_all$t_bias <- cti_all$cti_d - cti_all$temperature_deg_c
+
+cti_div_all <- cti_all %>% group_by(code) %>% summarise(ctdiv = sqrt(sum(((STI_density-cti_d)*(STI_density-cti_d)*coverage))/sum(coverage)))
+cti_all <- left_join(cti_all, cti_div_all, by = c("code"))
+ 
+
+Indices <-  subset(cti_all[,c(1:8,11:41,49,50)])
+Distinct_indices <- Indices %>% distinct()
+
+write.csv(Distinct_indices, paste("Archaea_Distinct_indices_Temperature_subset",p,".csv",sep=""))
+
+
+}
+
