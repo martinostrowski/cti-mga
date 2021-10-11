@@ -3,14 +3,14 @@ Martin Ostrowski edited this page on 11 October 2021
 # cti-mga
 Community trait indices from metagenomes and amplicons
 
-The concept and code for deriving community trait-indicies from kernell-weigthed density 
+The concept and code for deriving community trait-indicies from kernel weigthed density 
 estimations of the realised niches of individual species or strains was devloped in collaboration 
 with Mark Brown, Martin Ostrowski, Wayne Rochester and Anthony Richardson. 
 
 ## Inputs
 
-1. A sequence, type or species abundance table, samples (rows) by sequences (columns)
-2. a corresponding metadata table with samples as rows
+1. Sequence, type or species abundance table, samples (rows) by sequences (columns)
+2. Corresponding metadata table with samples (rows) and measured variables (columns) e.g. `temperature`,`salnity`,`phosphate`, `nitrate`, `nitrate+nitrite`, `ammonium`, `depth`, 'abundance`, (or `counts`)
 
 ## Method overview
 
