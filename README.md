@@ -10,7 +10,7 @@ with Mark Brown, Martin Ostrowski, Wayne Rochester and Anthony Richardson.
 ## Inputs
 
 1. Sequence, type or species abundance table, samples (rows) by sequences (columns)
-2. Corresponding metadata table with samples (rows) and measured variables (columns) e.g. `temperature`,`salnity`,`phosphate`, `nitrate`, `nitrate+nitrite`, `ammonium`, `depth`, 'abundance`, (or `counts`)
+2. Corresponding metadata table with samples (rows) and measured variables (columns) e.g. `temperature`,`salnity`,`phosphate`, `nitrate`, `nitrate+nitrite`, `ammonium`, `depth`, `abundance`, (or `counts`)
 
 ## Method overview
 
